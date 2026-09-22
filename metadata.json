@@ -1,0 +1,6 @@
+{
+  "name": "PunchTracker",
+  "description": "Office Wi-Fi punch in/out attendance tracker with widgets, sessions, statistics, and state machine",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
