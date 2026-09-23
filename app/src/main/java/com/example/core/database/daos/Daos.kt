@@ -42,11 +42,17 @@ interface OfficeWifiDao {
     @Query("SELECT * FROM office_wifis ORDER BY name ASC")
     fun getAllWifis(): Flow<List<OfficeWifiEntity>>
 
+    @Query("SELECT * FROM office_wifis WHERE networkType = :networkType ORDER BY name ASC")
+    fun getWifisByTypeFlow(networkType: String): Flow<List<OfficeWifiEntity>>
+
     @Query("SELECT * FROM office_wifis WHERE enabled = 1")
     fun getEnabledWifisFlow(): Flow<List<OfficeWifiEntity>>
 
     @Query("SELECT * FROM office_wifis WHERE enabled = 1")
     suspend fun getEnabledWifis(): List<OfficeWifiEntity>
+
+    @Query("SELECT * FROM office_wifis WHERE networkType = :networkType AND enabled = 1")
+    suspend fun getEnabledWifisByType(networkType: String): List<OfficeWifiEntity>
 
     @Query("SELECT * FROM office_wifis WHERE officeId = :officeId")
     suspend fun getWifisForOffice(officeId: String): List<OfficeWifiEntity>

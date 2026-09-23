@@ -49,13 +49,20 @@ class AttendanceEngine(
                 AppLogger.info("AttendanceEngine", "WiFi reconnected before grace period expired. action=cancel_punch_out")
             }
 
-            // Find matching configured office network
+            // Find matching configured network
             val configuredWifis = wifiRepository.getEnabledNetworks()
-            val matchedWifi = matchOfficeWifi(ssid, bssid, configuredWifis)
+            val matchedWifi = matchWifi(ssid, bssid, configuredWifis)
 
             if (matchedWifi == null) {
-                AppLogger.debug("AttendanceEngine", "Connected WiFi '$ssid' does not match any configured office network")
-                // Reset manual override if phone disconnected from the old office wifi
+                AppLogger.debug("AttendanceEngine", "Connected WiFi '$ssid' does not match any configured network")
+                val currentState = attendanceRepository.getCurrentState()
+                if (currentState == AttendanceState.INSIDE_OFFICE) {
+                    processWifiDisconnected()
+                } else if (currentState == AttendanceState.AT_HOME) {
+                    attendanceRepository.setAttendanceState(AttendanceState.OUTSIDE_OFFICE)
+                    WidgetManager.updateWidgets(context)
+                }
+                // Reset manual override if phone disconnected from the old wifi
                 if (lastObservedSsid != null && lastObservedSsid != ssid) {
                     attendanceRepository.setManualOverride(false)
                 }
@@ -64,6 +71,26 @@ class AttendanceEngine(
                 return@launch
             }
 
+            // Handle HOME Wi-Fi Network
+            if (matchedWifi.networkType == "HOME") {
+                AppLogger.info("AttendanceEngine", "Home WiFi detected: ${matchedWifi.name} (SSID: $ssid). Setting state to AT_HOME")
+                val currentState = attendanceRepository.getCurrentState()
+                if (currentState == AttendanceState.INSIDE_OFFICE) {
+                    AppLogger.info("AttendanceEngine", "Transitioning from Office to Home. Auto punching out from office.")
+                    attendanceRepository.punchOut(
+                        timestamp = System.currentTimeMillis(),
+                        source = PunchSource.WIFI_CONNECTED
+                    )
+                }
+                attendanceRepository.setAttendanceState(AttendanceState.AT_HOME)
+                attendanceRepository.setManualOverride(false)
+                lastObservedSsid = ssid
+                lastObservedBssid = bssid
+                WidgetManager.updateWidgets(context)
+                return@launch
+            }
+
+            // Handle OFFICE Wi-Fi Network
             AppLogger.info("AttendanceEngine", "Office WiFi detected: ${matchedWifi.name} (id=${matchedWifi.id})")
 
             val currentState = attendanceRepository.getCurrentState()
@@ -118,8 +145,17 @@ class AttendanceEngine(
     fun processWifiDisconnected() {
         scope.launch {
             val currentState = attendanceRepository.getCurrentState()
+            if (currentState == AttendanceState.AT_HOME) {
+                AppLogger.info("AttendanceEngine", "Disconnected from Home Wi-Fi. Transitioning to OUTSIDE_OFFICE.")
+                attendanceRepository.setAttendanceState(AttendanceState.OUTSIDE_OFFICE)
+                lastObservedSsid = null
+                lastObservedBssid = null
+                WidgetManager.updateWidgets(context)
+                return@launch
+            }
+
             if (currentState != AttendanceState.INSIDE_OFFICE) {
-                AppLogger.debug("AttendanceEngine", "WiFi disconnected, but user is already OUTSIDE_OFFICE.")
+                AppLogger.debug("AttendanceEngine", "WiFi disconnected, user is already OUTSIDE_OFFICE.")
                 attendanceRepository.setManualOverride(false)
                 lastObservedSsid = null
                 lastObservedBssid = null
@@ -176,33 +212,44 @@ class AttendanceEngine(
      */
     suspend fun reconcileState(currentSsid: String?, currentBssid: String?) = withContext(Dispatchers.IO) {
         val configured = wifiRepository.getEnabledNetworks()
-        val matched = matchOfficeWifi(currentSsid?.removeSurrounding("\""), currentBssid, configured)
+        val matched = matchWifi(currentSsid?.removeSurrounding("\""), currentBssid, configured)
         val currentState = attendanceRepository.getCurrentState()
 
         AppLogger.info(
             "AttendanceEngine",
-            "Reconciliation: currentState=$currentState, matchedWifi=${matched?.name}"
+            "Reconciliation: currentState=$currentState, matchedWifi=${matched?.name} (${matched?.networkType})"
         )
 
         if (matched != null) {
             lastObservedSsid = matched.ssid
             lastObservedBssid = currentBssid
-            if (currentState != AttendanceState.INSIDE_OFFICE) {
-                val manualOverride = attendanceRepository.getManualOverride()
-                if (!manualOverride) {
-                    AppLogger.info("AttendanceEngine", "Reconciliation: Auto punching in to ${matched.name}")
-                    attendanceRepository.punchIn(
+            if (matched.networkType == "HOME") {
+                if (currentState == AttendanceState.INSIDE_OFFICE) {
+                    attendanceRepository.punchOut(
                         timestamp = System.currentTimeMillis(),
-                        source = PunchSource.SYSTEM_RECOVERY,
-                        wifiId = matched.id,
-                        ssid = matched.ssid,
-                        bssid = currentBssid
+                        source = PunchSource.SYSTEM_RECOVERY
                     )
-                    WidgetManager.updateWidgets(context)
+                }
+                attendanceRepository.setAttendanceState(AttendanceState.AT_HOME)
+                WidgetManager.updateWidgets(context)
+            } else {
+                if (currentState != AttendanceState.INSIDE_OFFICE) {
+                    val manualOverride = attendanceRepository.getManualOverride()
+                    if (!manualOverride) {
+                        AppLogger.info("AttendanceEngine", "Reconciliation: Auto punching in to ${matched.name}")
+                        attendanceRepository.punchIn(
+                            timestamp = System.currentTimeMillis(),
+                            source = PunchSource.SYSTEM_RECOVERY,
+                            wifiId = matched.id,
+                            ssid = matched.ssid,
+                            bssid = currentBssid
+                        )
+                        WidgetManager.updateWidgets(context)
+                    }
                 }
             }
         } else {
-            // Not connected to office wifi
+            // Not connected to office or home wifi
             if (currentState == AttendanceState.INSIDE_OFFICE) {
                 AppLogger.info(
                     "AttendanceEngine",
@@ -214,20 +261,24 @@ class AttendanceEngine(
                 )
                 attendanceRepository.setManualOverride(false)
                 WidgetManager.updateWidgets(context)
+            } else if (currentState == AttendanceState.AT_HOME) {
+                attendanceRepository.setAttendanceState(AttendanceState.OUTSIDE_OFFICE)
+                WidgetManager.updateWidgets(context)
             }
         }
     }
 
     private suspend fun isAnyOfficeWifiConnected(): Boolean {
-        // Will be checked against current network info or current observed network
-        return lastObservedSsid != null && matchOfficeWifi(
+        if (lastObservedSsid == null) return false
+        val matched = matchWifi(
             lastObservedSsid,
             lastObservedBssid,
             wifiRepository.getEnabledNetworks()
-        ) != null
+        )
+        return matched != null && matched.networkType == "OFFICE"
     }
 
-    private fun matchOfficeWifi(
+    private fun matchWifi(
         ssid: String?,
         bssid: String?,
         configured: List<OfficeWifiEntity>

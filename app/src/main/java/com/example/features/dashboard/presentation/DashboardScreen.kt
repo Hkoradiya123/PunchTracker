@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Wifi
@@ -71,6 +72,8 @@ import com.example.features.attendance.data.AttendanceRepository
 import com.example.features.attendance.domain.AttendanceEngine
 import com.example.features.wifi.domain.WifiMonitor
 import com.example.ui.theme.StatusDisconnecting
+import com.example.ui.theme.StatusHome
+import com.example.ui.theme.StatusHomeContainer
 import com.example.ui.theme.StatusInside
 import com.example.ui.theme.StatusOutside
 import kotlinx.coroutines.delay
@@ -300,12 +303,38 @@ private fun OfficeStatusCard(
         label = "pulseAlpha"
     )
 
+    val isHome = attendanceState == AttendanceState.AT_HOME
+
+    val cardContainerColor = when {
+        isInside -> MaterialTheme.colorScheme.primaryContainer
+        isHome -> StatusHomeContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val statusDotColor = when {
+        isInside -> StatusInside.copy(alpha = pulseAlpha)
+        isHome -> StatusHome
+        disconnectCountdown != null -> StatusDisconnecting
+        else -> StatusOutside
+    }
+
+    val statusTitle = when {
+        isInside -> "IN OFFICE"
+        isHome -> "AT HOME"
+        disconnectCountdown != null -> "DISCONNECTING"
+        else -> "OUTSIDE OFFICE"
+    }
+
+    val statusTextColor = when {
+        isInside -> MaterialTheme.colorScheme.onPrimaryContainer
+        isHome -> Color(0xFF3730A3) // Deep indigo text
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().testTag("office_status_card"),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isInside) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-        )
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor)
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
@@ -316,27 +345,31 @@ private fun OfficeStatusCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "OFFICE STATUS",
+                    text = if (isHome) "HOME / LOCATION STATUS" else "OFFICE STATUS",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (isInside) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        isInside -> MaterialTheme.colorScheme.onPrimaryContainer
+                        isHome -> Color(0xFF4338CA)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     letterSpacing = 1.sp
                 )
 
                 if (currentSsid != null) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Wifi,
+                                imageVector = if (isHome) Icons.Default.Home else Icons.Default.Wifi,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = if (isHome) StatusHome else MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
@@ -356,31 +389,32 @@ private fun OfficeStatusCard(
                     modifier = Modifier
                         .size(14.dp)
                         .clip(CircleShape)
-                        .background(
-                            (if (isInside) StatusInside else StatusOutside).copy(
-                                alpha = if (isInside) pulseAlpha else 1f
-                            )
-                        )
+                        .background(statusDotColor)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = if (isInside) "IN OFFICE" else "OUTSIDE OFFICE",
+                    text = statusTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = if (isInside) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    color = statusTextColor
                 )
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = if (isInside) {
-                    "Since ${TimeUtils.formatTime(firstIn)}"
-                } else {
-                    if (lastOut != null) "Last left at ${TimeUtils.formatTime(lastOut)}" else "Not clocked in today"
+                text = when {
+                    isInside -> "Since ${TimeUtils.formatTime(firstIn)}"
+                    isHome -> "Connected to home network. Attendance tracking standby."
+                    lastOut != null -> "Last left at ${TimeUtils.formatTime(lastOut)}"
+                    else -> "Not clocked in today"
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (isInside) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                color = when {
+                    isInside -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    isHome -> Color(0xFF4338CA).copy(alpha = 0.85f)
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
 
             // Flapping / Grace period alert

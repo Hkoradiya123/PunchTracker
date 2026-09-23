@@ -3,6 +3,7 @@ package com.example.core.model
 enum class AttendanceState {
     OUTSIDE_OFFICE,
     INSIDE_OFFICE,
+    AT_HOME,
     UNKNOWN,
     CONNECTING,
     DISCONNECTING

@@ -20,7 +20,8 @@ data class OfficeEntity(
     indices = [
         Index("officeId"),
         Index("enabled"),
-        Index("ssid")
+        Index("ssid"),
+        Index("networkType")
     ]
 )
 data class OfficeWifiEntity(
@@ -31,6 +32,7 @@ data class OfficeWifiEntity(
     val bssid: String? = null,
     val matchBssid: Boolean = false,
     val enabled: Boolean = true,
+    val networkType: String = "OFFICE", // "OFFICE" or "HOME"
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

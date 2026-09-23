@@ -51,6 +51,8 @@ import com.example.features.history.presentation.HistoryScreen
 import com.example.features.settings.presentation.SettingsScreen
 import com.example.features.statistics.presentation.StatisticsScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.StatusDisconnecting
+import com.example.ui.theme.StatusHome
 import com.example.ui.theme.StatusInside
 import com.example.ui.theme.StatusOutside
 
@@ -108,9 +110,16 @@ fun PunchTrackerApp(app: PunchTrackerApplication) {
                     }
                 },
                 actions = {
+                    val (chipColor, chipText) = when (attendanceState) {
+                        AttendanceState.INSIDE_OFFICE -> Pair(StatusInside, "IN OFFICE")
+                        AttendanceState.AT_HOME -> Pair(StatusHome, "AT HOME")
+                        AttendanceState.DISCONNECTING -> Pair(StatusDisconnecting, "DISCONNECTING")
+                        else -> Pair(StatusOutside, "OUTSIDE")
+                    }
+
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = (if (isInside) StatusInside else StatusOutside).copy(alpha = 0.15f),
+                        color = chipColor.copy(alpha = 0.15f),
                         modifier = Modifier.padding(end = 12.dp)
                     ) {
                         Row(
@@ -121,14 +130,14 @@ fun PunchTrackerApp(app: PunchTrackerApplication) {
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(if (isInside) StatusInside else StatusOutside)
+                                    .background(chipColor)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isInside) "IN OFFICE" else "OUTSIDE",
+                                text = chipText,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isInside) StatusInside else StatusOutside,
+                                color = chipColor,
                                 fontSize = 10.sp
                             )
                         }

@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Widgets
@@ -53,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +67,8 @@ import com.example.core.database.entities.OfficeWifiEntity
 import com.example.features.widget.WidgetManager
 import com.example.features.wifi.data.WifiRepository
 import com.example.features.wifi.domain.WifiMonitor
+import com.example.ui.theme.StatusHome
+import com.example.ui.theme.StatusHomeContainer
 import kotlinx.coroutines.launch
 
 @Composable
@@ -80,7 +85,11 @@ fun SettingsScreen(
     val currentSsid by wifiMonitor.currentSsid.collectAsStateWithLifecycle()
     val currentBssid by wifiMonitor.currentBssid.collectAsStateWithLifecycle()
 
+    val officeNetworks = networks.filter { it.networkType == "OFFICE" }
+    val homeNetworks = networks.filter { it.networkType == "HOME" }
+
     var showAddNetworkDialog by remember { mutableStateOf(false) }
+    var networkTypeForDialog by remember { mutableStateOf("OFFICE") }
     var prefilledSsid by remember { mutableStateOf("") }
     var prefilledBssid by remember { mutableStateOf("") }
 
@@ -163,16 +172,25 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text(
-                                text = "OFFICE WI-FI NETWORKS",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.outline,
-                                letterSpacing = 1.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Business,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "OFFICE WI-FI NETWORKS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    letterSpacing = 1.sp
+                                )
+                            }
                             val officeName = offices.firstOrNull()?.name ?: "Office HQ"
                             Text(
-                                text = "Group: $officeName",
+                                text = "Group: $officeName (${officeNetworks.size} configured)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -190,6 +208,7 @@ fun SettingsScreen(
                             onClick = {
                                 prefilledSsid = currentSsid ?: ""
                                 prefilledBssid = currentBssid ?: ""
+                                networkTypeForDialog = "OFFICE"
                                 showAddNetworkDialog = true
                             },
                             modifier = Modifier.weight(1f).testTag("add_current_wifi_button"),
@@ -204,6 +223,7 @@ fun SettingsScreen(
                             onClick = {
                                 prefilledSsid = ""
                                 prefilledBssid = ""
+                                networkTypeForDialog = "OFFICE"
                                 showAddNetworkDialog = true
                             },
                             modifier = Modifier.weight(1f).testTag("add_custom_wifi_button"),
@@ -218,19 +238,154 @@ fun SettingsScreen(
             }
         }
 
-        // List of configured networks
-        items(networks, key = { it.id }) { network ->
-            NetworkItemCard(
-                network = network,
-                onToggleEnabled = { enabled ->
-                    coroutineScope.launch {
-                        wifiRepository.updateNetwork(network.copy(enabled = enabled))
-                    }
-                },
-                onDelete = {
-                    networkToDelete = network
+        // List of configured office networks
+        if (officeNetworks.isEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "No office Wi-Fi networks configured yet.",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            )
+            }
+        } else {
+            items(officeNetworks, key = { it.id }) { network ->
+                NetworkItemCard(
+                    network = network,
+                    onToggleEnabled = { enabled ->
+                        coroutineScope.launch {
+                            wifiRepository.updateNetwork(network.copy(enabled = enabled))
+                        }
+                    },
+                    onDelete = {
+                        networkToDelete = network
+                    }
+                )
+            }
+        }
+
+        // Home Networks Header and Actions
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("home_networks_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Home,
+                                    contentDescription = null,
+                                    tint = StatusHome,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "HOME WI-FI NETWORKS (AT HOME)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = StatusHome,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                            Text(
+                                text = "Home Locations (${homeNetworks.size} configured)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "When connected, PunchTracker recognizes you are at home and switches status to AT HOME.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                prefilledSsid = currentSsid ?: ""
+                                prefilledBssid = currentBssid ?: ""
+                                networkTypeForDialog = "HOME"
+                                showAddNetworkDialog = true
+                            },
+                            modifier = Modifier.weight(1f).testTag("add_current_home_wifi_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusHome),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Home, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Add Current as Home", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                prefilledSsid = ""
+                                prefilledBssid = ""
+                                networkTypeForDialog = "HOME"
+                                showAddNetworkDialog = true
+                            },
+                            modifier = Modifier.weight(1f).testTag("add_custom_home_wifi_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Add Manual Home", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // List of configured home networks
+        if (homeNetworks.isEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = StatusHomeContainer.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "No home Wi-Fi networks configured yet. Add your home network above to show when you are at home.",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF4338CA)
+                    )
+                }
+            }
+        } else {
+            items(homeNetworks, key = { it.id }) { network ->
+                NetworkItemCard(
+                    network = network,
+                    onToggleEnabled = { enabled ->
+                        coroutineScope.launch {
+                            wifiRepository.updateNetwork(network.copy(enabled = enabled))
+                        }
+                    },
+                    onDelete = {
+                        networkToDelete = network
+                    }
+                )
+            }
         }
 
         // Flapping & Grace Period Setting Card
@@ -337,15 +492,17 @@ fun SettingsScreen(
         AddNetworkDialog(
             defaultSsid = prefilledSsid,
             defaultBssid = prefilledBssid,
+            initialNetworkType = networkTypeForDialog,
             onDismiss = { showAddNetworkDialog = false },
-            onConfirm = { name, ssid, bssid, matchBssid ->
+            onConfirm = { name, ssid, bssid, matchBssid, type ->
                 coroutineScope.launch {
                     wifiRepository.addNetwork(
                         officeId = activeOfficeId,
                         name = name,
                         ssid = ssid,
                         bssid = bssid,
-                        matchBssid = matchBssid
+                        matchBssid = matchBssid,
+                        networkType = type
                     )
                     showAddNetworkDialog = false
                 }
@@ -461,10 +618,14 @@ private fun NetworkItemCard(
     onToggleEnabled: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
+    val isHome = network.networkType == "HOME"
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isHome) StatusHomeContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface
+        )
     ) {
         Row(
             modifier = Modifier
@@ -474,12 +635,22 @@ private fun NetworkItemCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = network.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isHome) Icons.Default.Home else Icons.Default.Business,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isHome) StatusHome else MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = network.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "SSID: ${network.ssid}",
@@ -493,18 +664,37 @@ private fun NetworkItemCard(
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = if (network.matchBssid) "Match: Specific BSSID" else "Match: SSID",
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isHome) StatusHome.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = if (isHome) "HOME NETWORK" else "OFFICE NETWORK",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isHome) StatusHome else MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (network.matchBssid) "BSSID Match" else "SSID Match",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -529,10 +719,16 @@ private fun NetworkItemCard(
 private fun AddNetworkDialog(
     defaultSsid: String,
     defaultBssid: String,
+    initialNetworkType: String,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, ssid: String, bssid: String?, matchBssid: Boolean) -> Unit
+    onConfirm: (name: String, ssid: String, bssid: String?, matchBssid: Boolean, networkType: String) -> Unit
 ) {
-    var name by remember { mutableStateOf(if (defaultSsid.isNotEmpty()) defaultSsid else "Office Main") }
+    var selectedType by remember { mutableStateOf(initialNetworkType) }
+    var name by remember {
+        mutableStateOf(
+            if (defaultSsid.isNotEmpty()) defaultSsid else if (initialNetworkType == "HOME") "Home Wi-Fi" else "Office Main"
+        )
+    }
     var ssid by remember { mutableStateOf(defaultSsid) }
     var bssid by remember { mutableStateOf(defaultBssid) }
     var matchBssid by remember { mutableStateOf(false) }
@@ -540,13 +736,98 @@ private fun AddNetworkDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Office Wi-Fi") },
+        title = {
+            Text(if (selectedType == "HOME") "Add Home Wi-Fi" else "Add Office Wi-Fi")
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Network Type Selector
+                Text(
+                    text = "NETWORK TYPE",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        onClick = {
+                            selectedType = "OFFICE"
+                            if (name == "Home Wi-Fi") name = "Office Main"
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selectedType == "OFFICE") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Business,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (selectedType == "OFFICE") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Office",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = if (selectedType == "OFFICE") FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedType == "OFFICE") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            selectedType = "HOME"
+                            if (name == "Office Main") name = "Home Wi-Fi"
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selectedType == "HOME") StatusHomeContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (selectedType == "HOME") StatusHome else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Home",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = if (selectedType == "HOME") FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedType == "HOME") Color(0xFF3730A3) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = if (selectedType == "HOME") {
+                        "When connected to Home Wi-Fi, app shows AT HOME status and pauses office punch-in."
+                    } else {
+                        "When connected to Office Wi-Fi, app triggers automatic Punch In and tracks work duration."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Network Nickname (e.g. Office 5G)") },
+                    label = { Text("Network Nickname") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -596,10 +877,13 @@ private fun AddNetworkDialog(
                         error = "SSID is required"
                         return@Button
                     }
-                    onConfirm(name.ifBlank { ssid }, ssid.trim(), bssid.ifBlank { null }, matchBssid)
-                }
+                    onConfirm(name.ifBlank { ssid }, ssid.trim(), bssid.ifBlank { null }, matchBssid, selectedType)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedType == "HOME") StatusHome else MaterialTheme.colorScheme.primary
+                )
             ) {
-                Text("Add Network")
+                Text(if (selectedType == "HOME") "Add Home Network" else "Add Office Network")
             }
         },
         dismissButton = {

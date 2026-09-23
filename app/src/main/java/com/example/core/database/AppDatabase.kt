@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.core.database.daos.AppSettingsDao
 import com.example.core.database.daos.AttendanceSessionDao
 import com.example.core.database.daos.LogDao
@@ -32,7 +34,7 @@ import com.example.core.database.entities.WorkScheduleEntity
         WidgetConfigEntity::class,
         LogEntryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,13 +51,23 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE office_wifis ADD COLUMN networkType TEXT NOT NULL DEFAULT 'OFFICE'")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_office_wifis_networkType ON office_wifis(networkType)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "punchtracker_db"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

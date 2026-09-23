@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 interface WifiRepository {
     fun getAllOfficesFlow(): Flow<List<OfficeEntity>>
     fun getAllNetworksFlow(): Flow<List<OfficeWifiEntity>>
+    fun getOfficeNetworksFlow(): Flow<List<OfficeWifiEntity>>
+    fun getHomeNetworksFlow(): Flow<List<OfficeWifiEntity>>
     fun getEnabledNetworksFlow(): Flow<List<OfficeWifiEntity>>
     fun getGracePeriodSecondsFlow(): Flow<Int>
 
@@ -21,6 +23,13 @@ interface WifiRepository {
     suspend fun addOffice(name: String, address: String = ""): OfficeEntity
     suspend fun addNetwork(
         officeId: String,
+        name: String,
+        ssid: String,
+        bssid: String? = null,
+        matchBssid: Boolean = false,
+        networkType: String = "OFFICE"
+    )
+    suspend fun addHomeNetwork(
         name: String,
         ssid: String,
         bssid: String? = null,
@@ -46,6 +55,12 @@ class WifiRepositoryImpl(
 
     override fun getAllNetworksFlow(): Flow<List<OfficeWifiEntity>> =
         wifiDao.getAllWifis().flowOn(Dispatchers.IO)
+
+    override fun getOfficeNetworksFlow(): Flow<List<OfficeWifiEntity>> =
+        wifiDao.getWifisByTypeFlow("OFFICE").flowOn(Dispatchers.IO)
+
+    override fun getHomeNetworksFlow(): Flow<List<OfficeWifiEntity>> =
+        wifiDao.getWifisByTypeFlow("HOME").flowOn(Dispatchers.IO)
 
     override fun getEnabledNetworksFlow(): Flow<List<OfficeWifiEntity>> =
         wifiDao.getEnabledWifisFlow().flowOn(Dispatchers.IO)
@@ -74,7 +89,8 @@ class WifiRepositoryImpl(
         name: String,
         ssid: String,
         bssid: String?,
-        matchBssid: Boolean
+        matchBssid: Boolean,
+        networkType: String
     ) = withContext(Dispatchers.IO) {
         val cleanSsid = ssid.removeSurrounding("\"")
         val network = OfficeWifiEntity(
@@ -83,10 +99,28 @@ class WifiRepositoryImpl(
             ssid = cleanSsid,
             bssid = if (matchBssid) bssid else null,
             matchBssid = matchBssid,
+            networkType = networkType,
             enabled = true
         )
         wifiDao.insertWifi(network)
-        AppLogger.info("WifiRepo", "Added office Wi-Fi: $name (SSID: $cleanSsid, matchBssid=$matchBssid)")
+        AppLogger.info("WifiRepo", "Added $networkType Wi-Fi: $name (SSID: $cleanSsid, matchBssid=$matchBssid)")
+    }
+
+    override suspend fun addHomeNetwork(
+        name: String,
+        ssid: String,
+        bssid: String?,
+        matchBssid: Boolean
+    ) = withContext(Dispatchers.IO) {
+        val office = ensureDefaultOffice()
+        addNetwork(
+            officeId = office.id,
+            name = name,
+            ssid = ssid,
+            bssid = bssid,
+            matchBssid = matchBssid,
+            networkType = "HOME"
+        )
     }
 
     override suspend fun updateNetwork(network: OfficeWifiEntity) =
@@ -124,17 +158,27 @@ class WifiRepositoryImpl(
                     officeId = active.id,
                     name = "Office Main",
                     ssid = "CompanyWiFi",
+                    networkType = "OFFICE",
                     enabled = true
                 )
                 val wifi2 = OfficeWifiEntity(
                     officeId = active.id,
                     name = "Office 5G",
                     ssid = "CompanyWiFi-5G",
+                    networkType = "OFFICE",
+                    enabled = true
+                )
+                val homeWifi = OfficeWifiEntity(
+                    officeId = active.id,
+                    name = "My Home Wi-Fi",
+                    ssid = "HomeWiFi",
+                    networkType = "HOME",
                     enabled = true
                 )
                 wifiDao.insertWifi(wifi1)
                 wifiDao.insertWifi(wifi2)
-                AppLogger.info("WifiRepo", "Initialized default Office HQ and Wi-Fi networks")
+                wifiDao.insertWifi(homeWifi)
+                AppLogger.info("WifiRepo", "Initialized default Office HQ, Office Wi-Fi, and Home Wi-Fi networks")
             }
             active
         }

@@ -62,13 +62,26 @@ object WidgetManager {
                     val views = RemoteViews(context.packageName, R.layout.widget_punch_tracker)
 
                     // Set status
+                    val statusText = when (currentStateStr) {
+                        AttendanceState.INSIDE_OFFICE.name -> "IN OFFICE"
+                        AttendanceState.AT_HOME.name -> "AT HOME"
+                        AttendanceState.DISCONNECTING.name -> "DISCONNECTING"
+                        else -> "OUTSIDE OFFICE"
+                    }
+                    val statusColor = when (currentStateStr) {
+                        AttendanceState.INSIDE_OFFICE.name -> 0xFF38BDF8.toInt()
+                        AttendanceState.AT_HOME.name -> 0xFF818CF8.toInt()
+                        AttendanceState.DISCONNECTING.name -> 0xFFF59E0B.toInt()
+                        else -> 0xFF94A3B8.toInt()
+                    }
+
                     views.setTextViewText(
                         R.id.widget_status_text,
-                        if (isInside) "IN OFFICE" else "OUTSIDE OFFICE"
+                        statusText
                     )
                     views.setTextColor(
                         R.id.widget_status_text,
-                        if (isInside) 0xFF38BDF8.toInt() else 0xFF94A3B8.toInt()
+                        statusColor
                     )
 
                     // First in & Last out

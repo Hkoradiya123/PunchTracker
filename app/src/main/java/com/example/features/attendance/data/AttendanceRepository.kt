@@ -37,6 +37,7 @@ interface AttendanceRepository {
     fun getWeeklyStatsFlow(): Flow<WeeklyStats>
 
     suspend fun getCurrentState(): AttendanceState
+    suspend fun setAttendanceState(state: AttendanceState)
     suspend fun getManualOverride(): Boolean
     suspend fun setManualOverride(override: Boolean)
     suspend fun punchIn(
@@ -80,6 +81,7 @@ class AttendanceRepositoryImpl(
         return settingsDao.getValueFlow("attendance_state").map { value ->
             when (value) {
                 AttendanceState.INSIDE_OFFICE.name -> AttendanceState.INSIDE_OFFICE
+                AttendanceState.AT_HOME.name -> AttendanceState.AT_HOME
                 AttendanceState.CONNECTING.name -> AttendanceState.CONNECTING
                 AttendanceState.DISCONNECTING.name -> AttendanceState.DISCONNECTING
                 AttendanceState.UNKNOWN.name -> AttendanceState.UNKNOWN
@@ -102,11 +104,17 @@ class AttendanceRepositoryImpl(
         val value = settingsDao.getValue("attendance_state")
         return when (value) {
             AttendanceState.INSIDE_OFFICE.name -> AttendanceState.INSIDE_OFFICE
+            AttendanceState.AT_HOME.name -> AttendanceState.AT_HOME
             AttendanceState.CONNECTING.name -> AttendanceState.CONNECTING
             AttendanceState.DISCONNECTING.name -> AttendanceState.DISCONNECTING
             AttendanceState.UNKNOWN.name -> AttendanceState.UNKNOWN
             else -> AttendanceState.OUTSIDE_OFFICE
         }
+    }
+
+    override suspend fun setAttendanceState(state: AttendanceState) = withContext(Dispatchers.IO) {
+        settingsDao.setValue(AppSettingsEntity("attendance_state", state.name))
+        AppLogger.info("AttendanceRepo", "Attendance state set to: ${state.name}")
     }
 
     override suspend fun getManualOverride(): Boolean {

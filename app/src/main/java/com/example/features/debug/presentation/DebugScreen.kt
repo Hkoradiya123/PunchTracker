@@ -83,7 +83,7 @@ fun DebugScreen(
     val enabledNetworks by wifiRepository.getEnabledNetworksFlow().collectAsStateWithLifecycle(initialValue = emptyList())
     val recentLogs by database.logDao().getRecentLogsFlow(limit = 100).collectAsStateWithLifecycle(initialValue = emptyList())
 
-    val isMatchedOfficeWifi = enabledNetworks.any {
+    val matchedNetwork = enabledNetworks.firstOrNull {
         it.ssid.equals(currentSsid, ignoreCase = true) || (it.matchBssid && it.bssid == currentBssid)
     }
 
@@ -132,7 +132,11 @@ fun DebugScreen(
                     DiagnosticRow("Manual Override Active", manualOverride.toString())
                     DiagnosticRow("Current Wi-Fi SSID", currentSsid ?: "None (Disconnected)")
                     DiagnosticRow("Current BSSID", currentBssid ?: "None")
-                    DiagnosticRow("Matches Office Wi-Fi", if (isMatchedOfficeWifi) "YES" else "NO")
+                    DiagnosticRow("Network Match", when {
+                        matchedNetwork?.networkType == "OFFICE" -> "YES (OFFICE: ${matchedNetwork.name})"
+                        matchedNetwork?.networkType == "HOME" -> "YES (HOME: ${matchedNetwork.name})"
+                        else -> "NO (UNCONFIGURED)"
+                    })
                     DiagnosticRow(
                         "Disconnect Grace Timer",
                         if (disconnectCountdown != null) "${disconnectCountdown}s remaining" else "Inactive"
@@ -167,14 +171,15 @@ fun DebugScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Row 1: Connect & Switch
+                    // Row 1: Connect Office & Connect Home
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = {
-                                val targetSsid = enabledNetworks.firstOrNull()?.ssid ?: "CompanyWiFi"
+                                val targetSsid = enabledNetworks.firstOrNull { it.networkType == "OFFICE" }?.ssid
+                                    ?: enabledNetworks.firstOrNull()?.ssid ?: "CompanyWiFi"
                                 wifiMonitor.simulateConnect(targetSsid)
                             },
                             modifier = Modifier.weight(1f).testTag("sim_connect_wifi_button"),
@@ -183,9 +188,29 @@ fun DebugScreen(
                             Text("Connect Office", fontSize = 12.sp)
                         }
 
+                        Button(
+                            onClick = {
+                                val homeSsid = enabledNetworks.firstOrNull { it.networkType == "HOME" }?.ssid ?: "MyHomeWiFi"
+                                wifiMonitor.simulateConnect(homeSsid)
+                            },
+                            modifier = Modifier.weight(1f).testTag("sim_connect_home_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color(0xFF6366F1)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Connect Home", fontSize = 12.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Row 2: Switch AP & Disconnect
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         FilledTonalButton(
                             onClick = {
-                                val secondSsid = enabledNetworks.getOrNull(1)?.ssid ?: "CompanyWiFi-5G"
+                                val secondSsid = enabledNetworks.filter { it.networkType == "OFFICE" }.getOrNull(1)?.ssid ?: "CompanyWiFi-5G"
                                 wifiMonitor.simulateConnect(secondSsid)
                             },
                             modifier = Modifier.weight(1f).testTag("sim_roam_wifi_button"),
@@ -193,15 +218,7 @@ fun DebugScreen(
                         ) {
                             Text("Switch AP", fontSize = 12.sp)
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Row 2: Disconnect & Flap
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
                         OutlinedButton(
                             onClick = { wifiMonitor.simulateDisconnect() },
                             modifier = Modifier.weight(1f).testTag("sim_disconnect_wifi_button"),
@@ -209,7 +226,15 @@ fun DebugScreen(
                         ) {
                             Text("Disconnect", fontSize = 12.sp)
                         }
+                    }
 
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Row 3: Flapping & Seed
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedButton(
                             onClick = {
                                 val targetSsid = enabledNetworks.firstOrNull()?.ssid ?: "CompanyWiFi"
